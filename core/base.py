@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import glob
 import xml.etree.ElementTree as ET
 import errno
 from pyzilla import BugZilla
@@ -12,6 +13,7 @@ class XMLDatabase(object):
     _dbdir = ""
     _fileTemplate = "%s.xml"
     _productName = ""
+    _numOfBugs = 0
 
     def _createNewXMLFile(self):
         """ Creates empty XML file and returns it's name."""
@@ -74,7 +76,7 @@ class XMLDatabase(object):
 
         k, v = bugsDict.items()[0]
         root = ET.Element(k)
-        #numOfBugs = len(v)
+        self._numOfBugs = len(v)
 
         create_time = v[0]['creation_time']
 
@@ -87,6 +89,8 @@ class XMLDatabase(object):
             _serialize(bug, node)
             root.append(node)
             root.attrib["creation_time"] = str(create_time)
+
+        root.attrib["num_of_bugs"] = str(self._numOfBugs)
 
         return root
 
@@ -143,34 +147,80 @@ class BugzillaDB(object):
         self.database.setDatabaseName(self._dbname)
         self.database.createNewDBDir()
 
-    def getListOfProducts(self):
+    def getListOfProducts(self, dbtype='bugzilla'):
         productsList = []
-        productsIDs = self.bzilla.Product.get_selectable_products()
-        productsDict = self.bzilla.Product.get({'ids': productsIDs['ids']})
 
-        for product in productsDict['products']:
-            productsList.append(product['name'])
+        if dbtype.lower() == "bugzilla":
+            productsIDs = self.bzilla.Product.get_selectable_products()
+            productsDict = self.bzilla.Product.get({'ids': productsIDs['ids']})
+
+            for product in productsDict['products']:
+                productsList.append(product['name'])
+
+        elif dbtype.lower() == "xml":
+            fileMatcher = "./%s/*.xml" % self._dbname
+            filesList = glob.glob(fileMatcher)
+
+            for ffile in filesList:
+                productsList.append(os.path.splitext(
+                                    os.path.basename(ffile))[0])
+        else:
+            raise Exception("Something went terribly wrong.")
 
         return productsList
 
-    def getBugs(self):
-        listOfProducts = self.getListOfProducts()
-
-        for product in listOfProducts:
+    def downloadProductBugs(self, product, dbtype="xml"):
+        if dbtype.lower() == "xml":
             self.database.setProductName(product)
             bugs = self.bzilla.Bug.search({"product": str(product)})
             serialized = self.database.serialize(bugs)
             self.database.writeToXMLFile(serialized)
+        else:
+            raise Exception("Other methods like SQL not implemented yet!")
 
-    def getBug(self, product):
-        self.database.setProductName(product)
-        bugs = self.bzilla.Bug.search({"product": str(product)})
-        serialized = self.database.serialize(bugs)
-        self.database.writeToXMLFile(serialized)
+    def downloadAllProductsBugs(self, dbtype='xml'):
+        listOfProducts = self.getListOfProducts()
 
-    def updateBug(self, product):
-        self.database.setProductName(product)
-        create_time = self.database.getCreationTime(self.database.loadXMLFile())
-        bugs = self.bzilla.Bug.search({"product": str(product),
-                                       "creation_time": create_time})
-        self.database.update(bugs)
+        for product in listOfProducts:
+            self.downloadProductBugs(product, dbtype)
+
+    def updateProductBugs(self, product, dbtype='xml'):
+        if dbtype.lower() == "xml":
+            self.database.setProductName(product)
+            create_time = self.database.getCreationTime(self.database.loadXMLFile())
+            bugs = self.bzilla.Bug.search({"product": str(product),
+                                           "creation_time": create_time})
+            self.database.update(bugs)
+        else:
+            raise Exception("Other methods like SQL not implemented yet!")
+
+    def updateAllProductsBugs(self, dbtype='xml'):
+        listOfProducts = self.getListOfProducts(dbtype)
+
+        for product in listOfProducts:
+            self.updateProductBugs(product, dbtype)
+
+    def queryProductBugs(self, product, dbtype='xml'):
+        if dbtype.lower() == "xml":
+            self.database.setProductName(product)
+            bugs = self.database.loadXMLFile()
+
+            if bugs is None:
+                print "Local copy of requested product does not exist.\n" \
+                      "Fetching it from Bugzilla..."
+                self.downloadProductBugs(product, dbtype)
+                bugs = self.database.loadXMLFile()
+        else:
+            raise Exception("Other methods like SQL not implemented yet!")
+
+        return bugs
+
+    def listTrackedProducts(self, dbtype='xml'):
+        if dbtype.lower() == "xml":
+            trackedProducts = self.getListOfProducts('xml')
+            print "Currently we are tracking " \
+                  "%d products." % len(trackedProducts)
+            print "Tracked products:"
+
+            for p in trackedProducts:
+                print p

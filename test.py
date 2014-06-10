@@ -4,9 +4,12 @@
 from core.base import BugzillaDB
 
 def main():
-    d = BugzillaDB("https://bugzilla.redhat.com/xmlrpc.cgi", "fedora")
-    d.getBug("Atomic")
+    d = BugzillaDB("https://bugzilla.gnome.org/xmlrpc.cgi", "gnome")
+    #d.updateProductBugs('gnote')
+    #d.downloadProductBugs('gnote')
     #d.updateBug("Atomic")
+    var = d.queryProductBugs('gnote')
+    #d.listTrackedProducts('xml')
 
 if __name__ == '__main__':
     main()
