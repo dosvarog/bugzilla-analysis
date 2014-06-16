@@ -7,7 +7,9 @@ locally, and a part that uses that information to estimate software quality.
 ## Installation
 
 To install this tool simply clone it's git repository:
+
     git clone https://github.com/dosvarog/bugzilla-analysis.git
+
 or download a .zip file and extract it.
 
 Put .py files where you want and simply import them in Python.
