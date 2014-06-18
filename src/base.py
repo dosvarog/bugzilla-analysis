@@ -5,6 +5,9 @@ import os
 import glob
 import xml.etree.ElementTree as ET
 import errno
+import datetime
+
+from pymongo import MongoClient
 from pyzilla import BugZilla
 
 
@@ -15,7 +18,7 @@ class Database(object):
 
     The Context (BugzillaDB class) uses this to call concrete strategy.
     """
-    def getListOfProducts(self, dbtype='bugzilla'):
+    def getListOfProducts(self, dbtype=''):
         raise Exception("You must implement this method in a derived class!")
 
     def downloadProductBugs(self, product):
@@ -35,6 +38,145 @@ class Database(object):
 
     def listTrackedProducts(self):
         raise Exception("You must implement this method in a derived class!")
+
+
+class MongoDatabase(Database):
+    """ This is concrete implementation of database using the strategy
+    interface.
+
+    This class represents MongoDB database and uses it to store data about
+    bugs found in a specific product. Each product is a separate collection,
+    while each document in that collection represents a bug.
+    """
+
+    def __init__(self, url, dbname='default'):
+        if len(url) == 0:
+            raise ValueError("You must provide database URL!")
+
+        self.client = MongoClient()
+        self.db = self.client[dbname]
+        self.bzilla = BugZilla(url, verbose=False)
+
+    def createDateTimeObjects(self, bugs_dict):
+        """ Since Bugzilla doesn't return times in Python datetime format, we
+        have to search through dictionaries for those times and transform them
+        to datetime objects so MongoDB can save them in a BSON format.
+        """
+
+        def _create_datetime(corr_dicts):
+            for k, v in corr_dicts.items():
+                if isinstance(v, dict):
+                    _create_datetime(v)
+                elif k == 'creation_time':
+                    dt = str(v)
+                    corr_dt = datetime.datetime.strptime(dt,
+                                                         '%Y%m%dT%H:%M:%S')
+                    corr_dicts['creation_time'] = corr_dt
+                elif k == 'last_change_time':
+                    dt = str(v)
+                    corr_dt = datetime.datetime.strptime(dt,
+                                                         '%Y%m%dT%H:%M:%S')
+                    corr_dicts['last_change_time'] = corr_dt
+
+        bugs_list = bugs_dict.values()[0]
+
+        for bug in bugs_list:
+            _create_datetime(bug)
+
+        return bugs_list
+
+    def getListOfProducts(self, dbtype=''):
+        productsList = []
+
+        if dbtype.lower() == "bugzilla":
+            productsIDs = self.bzilla.Product.get_selectable_products()
+            productsDict = self.bzilla.Product.get({'ids': productsIDs['ids']})
+
+            for product in productsDict['products']:
+                productsList.append(product['name'])
+
+        else:
+            productsList = self.db.collection_names(include_system_collections=
+                                                    False)
+
+        return productsList
+
+    def downloadProductBugs(self, product):
+        collection = self.db[str(product)]
+        if str(product) in self.db.collection_names():
+            collection.drop()
+
+        print "Downloading: %s" % str(product)
+        try:
+            bugs = self.bzilla.Bug.search({"product": str(product)})
+            collection.insert(self.createDateTimeObjects(bugs))
+            print "Product saved to a database."
+        except Exception as e:
+            print e
+            print "Could not fetch %s bugs." % product
+
+    def downloadAllProductsBugs(self):
+        listOfProducts = self.getListOfProducts('bugzilla')
+
+        for product in listOfProducts:
+            self.downloadProductBugs(product)
+
+    def updateProductBugs(self, product):
+        collection = self.db[str(product)]
+        if str(product) in self.db.collection_names():
+            last_entry = collection.aggregate([{'$sort': {'creation_time': -1}},
+                                               {'$limit': 1}])
+            last_creation_time = last_entry['result'][0]['creation_time']
+            bugs = self.createDateTimeObjects(self.bzilla.Bug.search(
+                {'product': str(product),
+                 'creation_time': last_creation_time}))
+
+            # Bugzilla's search method returns bugs that were created at this
+            # time or later, it seems that 'this time' bug is always first in
+            # the list.
+            bugs.pop(0)
+
+            # if it happens that that's not the case, we will have to
+            # use following piece of code:
+            # for bug in bugs[:]:
+            #     if bug['creation_time'] == last_creation_time:
+            #         bugs.remove(bug)
+            if bugs:
+                collection.insert(bugs)
+                print "%s has been updated with new bug entries." % str(product)
+            else:
+                print "Nothing to update, " \
+                      "%s is already up-to-date." % str(product)
+        else:
+            print "Product doesn't exist in a database."
+
+    def updateAllProductsBugs(self):
+        listOfProducts = self.getListOfProducts()
+
+        for product in listOfProducts:
+            print product
+            self.updateProductBugs(product)
+
+    def queryProductBugs(self, product):
+        collection = self.db[str(product)]
+        if str(product) not in self.db.collection_names():
+            print "Local copy of requested product does not exist.\n" \
+                  "Fetching it from Bugzilla..."
+            self.downloadProductBugs(product)
+
+        return collection
+
+    def listTrackedProducts(self):
+        trackedProducts = self.getListOfProducts()
+
+        print "Currently we are tracking " \
+              "%d products." % len(trackedProducts)
+        print "Tracked products:"
+
+        for p in trackedProducts:
+            print p
+
+        return trackedProducts
 
 
 class XMLDatabase(Database):
@@ -265,6 +407,7 @@ class XMLDatabase(Database):
 
     def listTrackedProducts(self):
         trackedProducts = self.getListOfProducts()
+
         print "Currently we are tracking " \
               "%d products." % len(trackedProducts)
         print "Tracked products:"

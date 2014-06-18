@@ -1,30 +1,22 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-from src.base import BugzillaDB, XMLDatabase
+from src.base import BugzillaDB, MongoDatabase, XMLDatabase
 
 
 def main():
-    xmldb = XMLDatabase("https://bugzilla.gnome.org/xmlrpc.cgi", "gnome")
-    bugdb = BugzillaDB(xmldb)
+    #xmldb = XMLDatabase("https://bugzilla.gnome.org/xmlrpc.cgi", "gnome")
+    mongodb = MongoDatabase("https://bugzilla.gnome.org/xmlrpc.cgi", "gnome")
+    bugdb = BugzillaDB(mongodb)
 
-    # download bugs of a specific product, which exists of course
-    #bugdb.downloadProductBugs('galf')
-
-    # download bugs of all products in a database
-    #bugdb.downloadAllProductsBugs()
-
-    # update product in a local database
-    #bugdb.updateProductBugs('galf')
-
-    # update all products in a local database
-    #bugdb.updateAllProductsBugs()
-
-    # query local database for bugs on a provided product
-    #bugs = bugdb.queryProductBugs('bonobo')
-
-    # list all products that are tracked locally
-    #bugdb.listTrackedProducts()
+    # bugdb.downloadProductBugs('galf')
+    # bugdb.downloadAllProductsBugs()
+    # bugdb.updateProductBugs('galf')
+    # bugdb.updateAllProductsBugs()
+    # var = bugdb.queryProductBugs('bonobo')
+    # for p in var.find():
+    #     print p
+    # bugdb.listTrackedProducts()
 
 if __name__ == '__main__':
     main()
