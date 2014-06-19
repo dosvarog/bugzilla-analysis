@@ -12,12 +12,15 @@ def main():
     man = MongoAnalyzer()
     an = Analyzer(bugdb, man)
 
-    # score = an.calculateScore('bonobo')
+    # score = an.calculateProductScore('bonobo')
     # print score
     # num = an.getNumberOfBugs('bonobo')
     # print num
     # typ = an.getNumberOfBugsByType('bonobo')
     # print typ
+
+    # an.plotProductSeverityDistribution('libgnome')
+    # print an.cmpTwoProducts('bonobo', 'Gnumeric')
 
     # bugdb.downloadProductBugs('Atomic')
     # bugdb.downloadAllProductsBugs()

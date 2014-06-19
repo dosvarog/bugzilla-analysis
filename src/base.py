@@ -77,6 +77,11 @@ class MongoDatabase(Database):
                     corr_dt = datetime.datetime.strptime(dt,
                                                          '%Y%m%dT%H:%M:%S')
                     corr_dicts['last_change_time'] = corr_dt
+                elif k == 'cf_last_closed':
+                    dt = str(v)
+                    corr_dt = datetime.datetime.strptime(dt,
+                                                         '%Y%m%dT%H:%M:%S')
+                    corr_dicts['cf_last_closed'] = corr_dt
 
         bugs_list = bugs_dict.values()[0]
 
@@ -90,7 +95,8 @@ class MongoDatabase(Database):
 
         if dbtype.lower() == "bugzilla":
             productsIDs = self.bzilla.Product.get_selectable_products()
-            productsDict = self.bzilla.Product.get({'ids': productsIDs['ids']})
+            productsDict = self.bzilla.Product.get({'ids': productsIDs['ids'],
+                                                   'include_fields': ['name']})
 
             for product in productsDict['products']:
                 productsList.append(product['name'])
@@ -106,17 +112,18 @@ class MongoDatabase(Database):
         if str(product) in self.db.collection_names():
             collection.drop()
 
-        print "Downloading: %s" % str(product)
+        print "Downloading product: %s" % str(product)
         try:
-            bugs = self.bzilla.Bug.search({"product": str(product)})
+            bugs = self.bzilla.Bug.search({'product': str(product)})
             collection.insert(self.createDateTimeObjects(bugs))
-            print "Product saved to a database."
+            print "Product saved to a database.\n"
         except Exception as e:
             print e
-            print "Could not fetch %s bugs." % product
+            print "Could not fetch %s bugs.\n" % product
 
     def downloadAllProductsBugs(self):
         listOfProducts = self.getListOfProducts('bugzilla')
+        print "Found %d products for download." % len(listOfProducts)
 
         for product in listOfProducts:
             self.downloadProductBugs(product)
@@ -342,7 +349,8 @@ class XMLDatabase(Database):
 
         if dbtype.lower() == "bugzilla":
             productsIDs = self.bzilla.Product.get_selectable_products()
-            productsDict = self.bzilla.Product.get({'ids': productsIDs['ids']})
+            productsDict = self.bzilla.Product.get({'ids': productsIDs['ids'],
+                                                   'include_fields': ['name']})
 
             for product in productsDict['products']:
                 productsList.append(product['name'])
@@ -373,6 +381,7 @@ class XMLDatabase(Database):
 
     def downloadAllProductsBugs(self):
         listOfProducts = self.getListOfProducts('bugzilla')
+        print "Found %d products for download." % len(listOfProducts)
 
         for product in listOfProducts:
             self.downloadProductBugs(product)
@@ -423,7 +432,6 @@ class BugzillaDB(object):
     Startegy pattern. This class is actually a Context that is configured with
     a ConcreteStrategy object and maintains a reference to a Strategy object.
     """
-
     def __init__(self, database):
         self.db = database
 

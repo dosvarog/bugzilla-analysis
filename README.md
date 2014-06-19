@@ -14,6 +14,12 @@ or download a .zip file and extract it.
 
 Put .py files where you want and simply import them in Python.
 
+## Requirements
+
+You will also need to download two Python modules: PyZilla and CairoPlot
+You can find PyZilla here: https://github.com/williamh/PyZilla
+and CairoPlot here: https://launchpad.net/cairoplot
+
 ## Code Examples
 
     from src.base import BugzillaDB, XMLDatabase

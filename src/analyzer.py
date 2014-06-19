@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-from src.base import BugzillaDB, MongoDatabase
+import CairoPlot
 
 
 class AbstractAnalyzer(object):
@@ -9,7 +9,7 @@ class AbstractAnalyzer(object):
     All other classes which represent concrete implementations of database
     must be derived from this class.
     """
-    def calculateScore(self, qry):
+    def calculateProductScore(self, qry):
         raise Exception("You must implement this method in a derived class!")
 
     def getNumberOfBugs(self, qry):
@@ -17,6 +17,10 @@ class AbstractAnalyzer(object):
 
     def getNumberOfBugsByType(self, qry):
         raise Exception("You must implement this method in a derived class!")
+
+    def plotSeverityDistribution(self, dist, product):
+        raise Exception("You must implement this method in a derived class!")
+
 
 class MongoAnalyzer(AbstractAnalyzer):
     """ This is concrete implementation of database using the strategy
@@ -65,7 +69,7 @@ class MongoAnalyzer(AbstractAnalyzer):
             elif bug['severity'] == 'blocker':
                 self._blocker_num += 1
 
-    def calculateScore(self, qry):
+    def calculateProductScore(self, qry):
         self._countBugs(qry)
         score = self._enhan_num*self._enhan_weight + \
                 self._trivial_num*self._trivial_weight + \
@@ -103,6 +107,21 @@ class MongoAnalyzer(AbstractAnalyzer):
         self._reset()
         return bugs_by_type
 
+    def plotProductSeverityDistribution(self, dist, product):
+        severity_list = ['enhancement', 'trivial', 'minor', 'normal',
+                         'major', 'critical', 'blocker']
+        values_list = []
+
+        for severity in severity_list:
+            values_list.append(dist[severity])
+
+        maxbugs = "%d bugs" % max(values_list)
+        vlabels = ['zarro boogs', maxbugs]
+
+        CairoPlot.bar_plot(str(product), values_list, 500, 400,
+                           border=20, grid=True,
+                           h_labels=severity_list, v_labels=vlabels)
+
 
 class Analyzer(object):
     """ This class is actually a Context that is configured with
@@ -112,9 +131,9 @@ class Analyzer(object):
         self.db = database
         self.an = analyzer
 
-    def calculateScore(self, product):
+    def calculateProductScore(self, product):
         q = self.db.queryProductBugs(str(product))
-        scr = self.an.calculateScore(q)
+        scr = self.an.calculateProductScore(q)
         return scr
 
     def getNumberOfBugs(self, product):
@@ -126,3 +145,34 @@ class Analyzer(object):
         q = self.db.queryProductBugs(str(product))
         typ = self.an.getNumberOfBugsByType(q)
         return typ
+
+    def plotProductSeverityDistribution(self, product):
+        severity_dist = self.getNumberOfBugsByType(product)
+        self.an.plotProductSeverityDistribution(severity_dist, product)
+
+    def cmpTwoProducts(self, prod1, prod2):
+        q = self.db.queryProductBugs(str(prod1))
+        score1 = self.an.calculateProductScore(q)
+        num_of_bugs1 = self.an.getNumberOfBugs(q)
+        q = self.db.queryProductBugs(str(prod2))
+        score2 = self.an.calculateProductScore(q)
+        num_of_bugs2 = self.an.getNumberOfBugs(q)
+
+        compared = {}
+        # now we have to normalize the score,
+        # since some products have a lot
+        # of bugs, while others do not
+
+        if num_of_bugs1 == num_of_bugs2:
+            compared = {str(prod1): score1, str(prod2): score2}
+            return compared
+        elif num_of_bugs1 < num_of_bugs2:
+            scale = num_of_bugs1/float(num_of_bugs2)
+            score2 *= scale
+            compared = {str(prod1): score1, str(prod2): score2}
+            return compared
+        else:
+            scale = num_of_bugs2/float(num_of_bugs1)
+            score1 *= scale
+            compared = {str(prod1): score1, str(prod2): score2}
+            return compared
